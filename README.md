@@ -3,10 +3,12 @@
  Music-Player using PyQt5
  version: 3
  
- ##Features
+## Features
  
  * Searchbar
  * Filters:
-  * Filter Artist
-  * Filter Album
-  * Playlist
+   Only one can be used at a time
+   * Filter Artist
+   * Filter Album
+   * Playlist:
+    
