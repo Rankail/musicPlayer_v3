@@ -68,7 +68,8 @@ curSongname = ""
 filters = {
 	"search": "",
 	"album": "",
-	"artist": ""
+	"artist": "",
+	"playlist": ""
 }
 
 #time
@@ -90,7 +91,7 @@ vlcPlayer = vlcInstance.media_player_new()
 #----------------------------------
 
 #get filename from path
-def getPureName(filename) -> str:
+def getPureName(filename: str) -> str:
 	return splitext(basename(filename))[0]
 
 #checks if string contains all of the words
@@ -102,7 +103,7 @@ def hasSearchWords(string: str) -> bool:
 	
 	return True
 
-def findRowBySongname(songname: str):
+def findRowBySongname(songname: str) -> int:
 	findsTitleStart = songTableModel.findItems(songname.split(" - ")[0], Qt.MatchFlag.MatchStartsWith, 0)
 	findsArtistEnd = songTableModel.findItems(songname.split(" - ")[-1], Qt.MatchFlag.MatchEndsWith, 1)
 	indicesTitle = [songTableModel.indexFromItem(f).row() for f in findsTitleStart]
@@ -274,6 +275,99 @@ def addFolder():
 		emitAddSong.addSongs(ps)
 
 #----------------------------------
+#-------- Playlist-Controls -------
+#----------------------------------
+
+def createPlaylist():
+	dialog = QInputDialog(window)
+	dialog.setInputMode(QInputDialog.InputMode.TextInput)
+	dialog.setWindowTitle("Create Playlist")
+	dialog.setFixedSize(QSize(250, 100))
+	dialog.setLabelText("Playlist name:")
+	dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+	ok = dialog.exec()
+	text = dialog.textValue()
+	if ok and text:
+		playlists[text] = []
+		playListListBox.addItem(text)
+
+def addToPlaylist(playlist: str, songname: str):
+	playlists[playlist].append(songname)
+
+def addShownSongsToPlaylist():
+	dialog = QInputDialog(window)
+	dialog.setComboBoxEditable(False)
+	items = list(playlists.keys())
+	items.insert(0, "-- None Selected --")
+	dialog.setComboBoxItems(items)
+	dialog.setWindowTitle("Add Shown Songs To Playlist")
+	dialog.setFixedSize(QSize(350, 100))
+	dialog.setLabelText("Select Playlist:")
+	dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+	ok = dialog.exec()
+	playlist = dialog.textValue()
+	if not (ok and playlist and playlist != "-- None Selected --"): return
+
+	for i in range(filterSongTable.rowCount()):
+		index0 = filterSongTable.index(i, 0)
+		index1 = filterSongTable.index(i, 1)
+		songname = (filterSongTable.data(index0))+" - "+(filterSongTable.data(index1))
+		if not songname in playlists[playlist]:
+			playlists[playlist].append(songname)
+
+def renamePlaylist():
+	dialog1 = QInputDialog(window)
+	dialog1.setComboBoxEditable(False)
+	items = list(playlists.keys())
+	items.insert(0, "-- None Selected --")
+	dialog1.setComboBoxItems(items)
+	dialog1.setWindowTitle("Select Playlist To Rename")
+	dialog1.setFixedSize(QSize(350, 100))
+	dialog1.setLabelText("Select Playlist:")
+	dialog1.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+	ok = dialog1.exec()
+	playlist = dialog1.textValue()
+	if not (ok and playlist and playlist != "-- None Selected --"): return
+
+	dialog1 = QInputDialog(window)
+	dialog1.setInputMode(QInputDialog.InputMode.TextInput)
+	dialog1.setWindowTitle("New Playlist Name")
+	dialog1.setFixedSize(QSize(350, 100))
+	dialog1.setLabelText("Enter New Name for '"+playlist+"':")
+	dialog1.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+	ok = dialog1.exec()
+	newName = dialog1.textValue()
+	if not (ok and newName): return
+
+	playlists[newName] = playlists.pop(playlist)
+	index = playListListBox.findText(playlist)
+	if filters["playlist"] == playlist:
+		playListListBox.setCurrentText(newName)
+		filters["playlist"] = newName
+	playListListBox.setItemText(index, newName)
+
+def removeFromPlaylist(playlist: str, songname: str):
+	global filterChange
+	playlists[playlist].remove(songname)
+	filterChange = True
+	filterSongTable.setFilterFixedString("")
+
+def delCurPlaylist():
+	if filters["playlist"] and filters["playlist"] in playlists:
+		dialog = QMessageBox()
+		dialog.setWindowTitle("Delete Playlist?")
+		dialog.setText("Do you want to delete the playlist '"+filters["playlist"]+"'?")
+		dialog.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+		dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+		dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+		result = dialog.exec()
+		if result == QMessageBox.StandardButton.Ok:
+			playlists.pop(filters["playlist"])
+			index = playListListBox.currentIndex()
+			playListListBox.setCurrentText("-- None Selected --")
+			playListListBox.removeItem(index)
+
+#----------------------------------
 #--------- Music-Controls ---------
 #----------------------------------
 
@@ -371,17 +465,19 @@ def playPauseSong():
 #------------- Events -------------
 #----------------------------------
 def songSelectedEvent(nIndex: QModelIndex, pIndex: QModelIndex):
-	global curIndex, curSongname, selectionAboutChanged
+	global curIndex, curSongname, selectionAboutChanged, playing
 	if selectionAboutChanged:
 		selectionAboutChanged = False
 		return
 	if filterChange:
 		curIndex = -1
+		curSongname = ""
 		vlcPlayer.stop()
 		curSongLbl.setText("")
 		timeSlider.setValue(0)
 		playTimeLbl.setText("00:00:00")
 		songLenLbl.setText("00:00:00")
+		playing = False
 		return
 	curIndex = nIndex.row()
 	index0 = filterSongTable.index(curIndex, 0)
@@ -406,11 +502,26 @@ def timeSlideEvent(pos: int):
         vlcPlayer.set_time(curTimePos*1000)
         playTimeLbl.setText(time.strftime('%H:%M:%S', time.gmtime(curTimePos)))
 
+def clearFilters():
+	global filterChange
+	filterChange = True
+	filters["search"] = ""
+	filters["artist"] = ""
+	filters["album"] = ""
+	filters["playlist"] = ""
+	filterSongTable.setFilterFixedString("")
+	searchField.setText("")
+	artistListBox.setCurrentText("-- None Selected --")
+	albumListBox.setCurrentText("-- None Selected --")
+	playListListBox.setCurrentText("-- None Selected --")
+
 def searchEvent(text: str):
 	global filterChange
 	filterChange = True
 	filters["search"] = text
 	filterSongTable.setFilterFixedString("")
+	albumListBox.setCurrentText("-- None Selected --")
+	playListListBox.setCurrentText("-- None Selected --")
 
 def artistFilterEvent(artist: str):
 	global filterChange
@@ -439,6 +550,22 @@ def albumFilterEvent(album: str):
 		filterSongTable.setFilterFixedString("")
 		artistListBox.setCurrentText("-- None Selected --")
 		playListListBox.setCurrentText("-- None Selected --")
+
+def playlistFilterEvent(playlist: str):
+	global filterChange
+	print("ou", playlist)
+	if not filterChange:
+		print("in", playlist)
+		filterChange = True
+		filters["artist"] = ""
+		filters["album"] = ""
+		if playlist == "-- None Selected --":
+			filters["playlist"] = ""
+		else:
+			filters["playlist"] = playlist
+		filterSongTable.setFilterFixedString("")
+		artistListBox.setCurrentText("-- None Selected --")
+		albumListBox.setCurrentText("-- None Selected --")
 
 def sortChangedScroll(index, order):
 	global curIndex
@@ -537,6 +664,24 @@ fileMenu.addSeparator()
 # fileMenu.addAction(delShownSongsAction)
 # fileMenu.addAction(delAllSongsAction)
 
+playListMenu = QMenu("Playlist", menubar)
+menubar.addMenu(playListMenu)
+
+newPlaylistAction = QAction("New Playlist", playListMenu)
+renamePlaylistAction = QAction("Rename Playlist", playListMenu)
+addShownToPlaylistAction = QAction("Add Shown Songs to Playlist", playListMenu)
+
+newPlaylistAction.setShortcut("Ctrl+N")
+
+newPlaylistAction.triggered.connect(createPlaylist)
+renamePlaylistAction.triggered.connect(renamePlaylist)
+addShownToPlaylistAction.triggered.connect(addShownSongsToPlaylist)
+
+playListMenu.addAction(newPlaylistAction)
+playListMenu.addAction(renamePlaylistAction)
+playListMenu.addSeparator()
+playListMenu.addAction(addShownToPlaylistAction)
+
 #----------------------------------
 #--------- Volume-Frame ----------
 #----------------------------------
@@ -562,6 +707,8 @@ volumeSlider.valueChanged.connect(lambda: volumeEvent(volumeSlider.value()))
 
 volumeLayout.addWidget(volumeSlider, alignment=Qt.AlignmentFlag.AlignHCenter)
 volumeLayout.addWidget(volumeIcon, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+volumeWidget.setLayout(volumeLayout)
 
 #----------------------------------
 #---------- Search-Frame ----------
@@ -606,20 +753,40 @@ playListListBox.setFont(QFont("Arial", 10))
 playListListBox.setStyleSheet("background-color: "+bg2)
 playListListBox.addItem("-- None Selected --")
 
+redXIcon = QIcon(rscDir+"/redX.png")
+redXPressedIcon = QIcon(rscDir+"/redXPressed.png")
+
+def delCurPlayBtnPressed():
+	delCurPlaylistBtn.setIcon(redXPressedIcon)
+
+def delCurPlayBtnReleased():
+	delCurPlaylistBtn.setIcon(redXIcon)
+
+
+delCurPlaylistBtn = QPushButton(redXIcon, "", filterWidget)
+delCurPlaylistBtn.setFixedSize(QSize(25, 25))
+delCurPlaylistBtn.setIconSize(QSize(25, 25))
+delCurPlaylistBtn.pressed.connect(delCurPlayBtnPressed)
+delCurPlaylistBtn.released.connect(delCurPlayBtnReleased)
+delCurPlaylistBtn.clicked.connect(delCurPlaylist)
+
+
 searchField.textChanged.connect(searchEvent)
-# clearSearchBtn.clicked.connect(clearFilters)
+clearSearchBtn.clicked.connect(clearFilters)
 artistListBox.currentTextChanged.connect(artistFilterEvent)
 albumListBox.currentTextChanged.connect(albumFilterEvent)
+playListListBox.currentTextChanged.connect(playlistFilterEvent)
 
 filterLayout.addWidget(searchLbl, 0, 0)
 filterLayout.addWidget(searchField, 1, 0, 1, 5)
-filterLayout.addWidget(clearSearchBtn, 0, 5, 2, 1)
+filterLayout.addWidget(clearSearchBtn, 0, 5, 2, 2)
 filterLayout.addWidget(artistListLbl, 2, 0)
 filterLayout.addWidget(artistListBox, 3, 0, 1, 2)
 filterLayout.addWidget(albumListLbl, 2, 2)
 filterLayout.addWidget(albumListBox, 3, 2, 1, 2)
 filterLayout.addWidget(playListListLbl, 2, 4)
 filterLayout.addWidget(playListListBox, 3, 4, 1, 2)
+filterLayout.addWidget(delCurPlaylistBtn, 3, 6, 1, 1)
 
 filterLayout.setColumnStretch(0, 1)
 filterLayout.setColumnStretch(1, 1)
@@ -629,8 +796,6 @@ filterLayout.setColumnStretch(4, 1)
 filterLayout.setColumnStretch(5, 1)
 
 filterWidget.setLayout(filterLayout)
-
-volumeWidget.setLayout(volumeLayout)
 
 #----------------------------------
 #---------- Song-List -------------
@@ -655,14 +820,46 @@ class SongTableSortFilterProxyModel(QSortFilterProxyModel):
 			QTimer.singleShot(0, tableViewFilterEnded)
 		if obj[0] == None or obj[1] == None or obj[2] == None:
 			return True
-		if not ("search" in filters and hasSearchWords(" ".join(obj))):
+		if filters["search"] and not (hasSearchWords(" ".join(obj))):
 			return False
-		if not ("artist" in filters and filters["artist"] in obj[1]):
+		if filters["artist"] and not (filters["artist"] in obj[1]):
 			return False
-		if not ("album" in filters and filters["album"] in obj[2]):
+		if filters["album"] and not (filters["album"] in obj[2]):
+			return False
+		if filters["playlist"] and not (obj[0]+" - "+obj[1] in playlists[filters["playlist"]]):
 			return False
 		
 		return True
+
+class SongTable(QTableView):
+	def __init__(self, parent):
+		super().__init__(parent=parent)
+
+	def contextMenuEvent(self, e: QContextMenuEvent):
+		self.menu = QMenu(self)
+		sourceIndex = filterSongTable.mapToSource(self.indexAt(e.pos()))
+		row = sourceIndex.row()
+		if row == -1: return
+		songname = songTableModel.data(songTableModel.index(row, 0))+" - "+songTableModel.data(songTableModel.index(row, 1))
+		addToPlaylistMenu = QMenu("Add To Playlist", self.menu)
+		removeFromPlayListMenu = QMenu("Remove From Playlist", self.menu)
+		actions = {}
+		for p in playlists:
+			if songname in playlists[p]:
+				actions[p] = QAction(p, addToPlaylistMenu)
+				removeFromPlayListMenu.addAction(actions[p])
+				actions[p].triggered.connect(lambda checked, pl=p: removeFromPlaylist(pl, songname))
+			else:
+				actions[p] = QAction(p, removeFromPlayListMenu)
+				addToPlaylistMenu.addAction(actions[p])
+				actions[p].triggered.connect(lambda checked, pl=p: addToPlaylist(pl, songname))
+
+		self.menu.addMenu(addToPlaylistMenu)
+		self.menu.addMenu(removeFromPlayListMenu)
+
+		self.menu.popup(QCursor.pos())
+
+		
 
 songTableModel = QStandardItemModel(0, 3)
 songTableModel.setHorizontalHeaderLabels(["Title", "Artist", "Album", "Track", "Shuffle"])
@@ -672,7 +869,7 @@ filterSongTable.setSourceModel(songTableModel)
 filterSongTable.setFilterKeyColumn(-1)
 
 tableWidth = 800
-songListBox = QTableView(mainWidget)
+songListBox = SongTable(mainWidget)
 songListBox.setMinimumHeight(400)
 songListBox.setMaximumHeight(1000)
 songListBox.setMaximumWidth(tableWidth)
@@ -737,6 +934,10 @@ timeWidget.setLayout(timeLayout)
 buttonWidget = QWidget(mainWidget)
 buttonWidget.setFixedSize(400, 70)
 buttonLayout = QHBoxLayout()
+
+if not isdir(rscDir):
+	print("can't find ressources")
+	exit()
 
 shuffleBtnImg = QIcon(rscDir+"/ShuffleBtn.png")
 backBtnImg = QIcon(rscDir+"/BackBtn.png")
@@ -868,68 +1069,101 @@ mainWidget.setLayout(mainLayout)
 #       -bg1
 #       -bg2
 
-if isdir(iniDir):
-	if isfile(iniDir+"/config.txt"):
-		with open(iniDir+"/config.txt", "r", encoding="utf-8") as f:
-			lines = f.read().split("\n")
-			if len(lines) == 8:
-				curSongname = lines[0]
-				curSongLbl.setText(curSongname)
+def loadConfig():
+	global curSongname, paused, curSongLen, curTimePos, curVolume
+	if not isfile(iniDir+"/config.txt"): return
 
-				paused = bool(lines[1])
+	with open(iniDir+"/config.txt", "r", encoding="utf-8") as f:
+		file = f.read()
+		if not file: return
 
-				curSongLen = float(lines[2] or 100)
-				songLenLbl.setText(time.strftime('%H:%M:%S', time.gmtime(int(curSongLen))))
-				timeSlider.setRange(0, int(curSongLen))
+		lines = f.read().split("\n")
+		if not len(lines) == 8: return
 
-				curTimePos = int(lines[3] or 0)
-				timeSlider.setValue(curTimePos)
-				playTimeLbl.setText(time.strftime('%H:%M:%S', time.gmtime(int(curTimePos))))
+		curSongname = lines[0]
+		curSongLbl.setText(curSongname)
 
-				curVolume = int(lines[4] or 50)
-				volumeSlider.setValue(curVolume)
+		paused = bool(lines[1])
 
-				filters["search"] = lines[5]
-				filters["artist"] = lines[6]
-				filters["album"] = lines[7]
-				if filters["search"]:
-					searchField.setText(filters["search"])
-				if filters["artist"]:
-					artistList.append(filters["artist"])
-					artistListBox.addItem(filters["artist"])
-					artistListBox.setCurrentText(filters["artist"])
-				elif filters["album"]:
-					albumList.append(filters["album"])
-					albumListBox.addItem(filters["album"])
-					albumListBox.setCurrentText(filters["album"])
-	
-	if isfile(iniDir+"/paths.txt"):
-		with open(iniDir+"/paths.txt", "r", encoding="utf-8") as f:
-			file = f.read()
-			if file[0] == "\n":
-				if file[-1] == "\n":
-					folders = file[1:-1].split("\n")
-			elif file[-1] == "\n":
-				parts = file[:-1].split("\n\n")
-				paths = parts[0].split("\n")
-				folders = parts[1].split("\n")
+		curSongLen = float(lines[2] or 100)
+		songLenLbl.setText(time.strftime('%H:%M:%S', time.gmtime(int(curSongLen))))
+		timeSlider.setRange(0, int(curSongLen))
+
+		curTimePos = int(lines[3] or 0)
+		timeSlider.setValue(curTimePos)
+		playTimeLbl.setText(time.strftime('%H:%M:%S', time.gmtime(int(curTimePos))))
+
+		curVolume = int(lines[4] or 50)
+		volumeSlider.setValue(curVolume)
+
+		filters["search"] = lines[5]
+		filters["artist"] = lines[6]
+		filters["album"] = lines[7]
+		if filters["search"]:
+			searchField.setText(filters["search"])
+		if filters["artist"]:
+			artistList.append(filters["artist"])
+			artistListBox.addItem(filters["artist"])
+			artistListBox.setCurrentText(filters["artist"])
+		elif filters["album"]:
+			albumList.append(filters["album"])
+			albumListBox.addItem(filters["album"])
+			albumListBox.setCurrentText(filters["album"])
+
+def loadPaths():
+	global folders, paths, removedPaths
+	if not isfile(iniDir+"/paths.txt"): return
+
+	with open(iniDir+"/paths.txt", "r", encoding="utf-8") as f:
+		file = f.read()
+		if not file: return
+
+		if file[0] == "\n":
+			if file[-1] == "\n":
+				folders = file[1:-1].split("\n")
 			else:
-				parts = file.split("\n\n")
-				paths = parts[0].split("\n")
-				folders = parts[1].split("\n")
-				removedPaths = parts[2].split("\n")
-			
-			ps = []
-			ps.extend(paths)
-			for f in folders:
-				ps.extend([f+"/"+p for p in listdir(f)])
-			for rp in removedPaths:
-				if rp in ps:
-					ps.remove(rp)
-				else:
-					removedPaths.remove(rp)
-			emitAddSong.addSongs(ps)
-							
+				parts = file[1:].split("\n\n")
+				folders = parts[0].split("\n")
+				removedPaths = parts[1].split("\n")
+		elif file[-1] == "\n":
+			parts = file[:-1].split("\n\n")
+			paths = parts[0].split("\n")
+			folders = parts[1].split("\n")
+		else:
+			parts = file.split("\n\n")
+			paths = parts[0].split("\n")
+			folders = parts[1].split("\n")
+			removedPaths = parts[2].split("\n")
+		
+		ps = []
+		ps.extend(paths)
+		for f in folders:
+			ps.extend([f+"/"+p for p in listdir(f)])
+		for rp in removedPaths:
+			if rp in ps:
+				ps.remove(rp)
+			else:
+				removedPaths.remove(rp)
+		emitAddSong.addSongs(ps)
+
+def loadPlaylists():
+	global playlists
+	if not isfile(iniDir+"/playlists.txt"): return
+
+	with open(iniDir+"/playlists.txt", "r", encoding="utf-8") as f:
+		file = f.read()
+		if not file: return
+
+		playlistParts = [part for part in file.split("\n\n") if part]
+		playlistParts = [part.split("\n") for part in playlistParts]
+		playlists = {part[0]: [p for p in part[1:] if p] for part in playlistParts}
+		for playlist in playlists:
+			playListListBox.addItem(playlist)
+
+if isdir(iniDir):
+	loadConfig()
+	loadPaths()
+	loadPlaylists()		
 else:
     print("Failed to load resources form '"+iniDir+"'")
     exit()
@@ -939,11 +1173,12 @@ else:
 #-------------------------------------------------------------------
 window.show()
 
-app.exec_()
+app.exec()
 
 #-------------------------------------------------------------------
 #---------------------------- Save Data ----------------------------
 #-------------------------------------------------------------------
+# save configs
 s = ""
 s += str(curSongname)+"\n"
 s += str(paused and "1" or "")+"\n"
@@ -961,6 +1196,7 @@ else:
     with open(iniDir+"/config.txt", "x", encoding="utf-8") as f:
         f.write(s)
 
+# save paths
 s = ""
 for p in paths:
 	s += p+"\n"
@@ -976,4 +1212,20 @@ if isfile(iniDir+"/paths.txt"):
         f.write(s)
 else:
     with open(iniDir+"/paths.txt", "x", encoding="utf-8") as f:
+        f.write(s)
+
+#save playlists
+s = ""
+for playlist, songs in playlists.items():
+	s += playlist+"\n"
+	for song in songs:
+		s += song+"\n"
+	s += "\n"
+s = s[:-2]
+
+if isfile(iniDir+"/playlists.txt"):
+    with open(iniDir+"/playlists.txt", "w", encoding="utf-8") as f:
+        f.write(s)
+else:
+    with open(iniDir+"/playlists.txt", "x", encoding="utf-8") as f:
         f.write(s)

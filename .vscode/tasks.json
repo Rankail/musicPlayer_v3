@@ -1,0 +1,11 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        { 
+            "label": "createPYW",
+            "command": "copy",
+            "type": "shell",
+            "args": ["musicPlayer_v3.py", "musicPlayer_v3.pyw"]
+        }
+    ]
+}
