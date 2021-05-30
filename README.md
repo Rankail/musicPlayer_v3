@@ -2,10 +2,8 @@
 
  Music-Player using PyQt5
  version: 3
- 
-## Features
 
-### Loading/Saving Data
+## Loading/Saving Data
 
  * configs:
    * volume
@@ -18,10 +16,16 @@
  * playlists:
    * playlistnames
    * songs
- 
-### Searchbar
 
-### Filters:
+## Adding Songs
+
+ * add single File
+ * add multiple Files
+ * add Folder
+ 
+## Searchbar
+
+## Filters:
  Only one can be used at a time
  * Filter Artist
  * Filter Album
