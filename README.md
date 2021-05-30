@@ -18,7 +18,6 @@
  * playlists:
    * playlistnames
    * songs
- * [ ] themes
  
 ### Searchbar
 
@@ -27,9 +26,8 @@
  * Filter Artist
  * Filter Album
  * Playlist:
-   * [x] create
-   * [x] rename
-   * [x] delete current
-   * [x] add/remove single songs using right-click-menu
-   * [x] add shown songs
-   * [ ] user drag-drop-sort
+   * create
+   * rename
+   * delete current
+   * add/remove single songs using right-click-menu
+   * add shown songs
