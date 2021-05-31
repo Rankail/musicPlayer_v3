@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import QModelIndex, QSortFilterProxyModel, Qt, pyqtSignal, QObject, QThread, QSize, QTimer
 import vlc
-import eyed3
+from tinytag import TinyTag
 import ctypes
 
 #----------------------------------
@@ -140,25 +140,20 @@ def updatePlayTime():
 def songObjGenerator(paths: Iterable):
 	paths = [p for p in paths if p.endswith(".mp3")]
 	for path in paths:
-		tag = eyed3.load(path)
-		if tag is None:
-			continue
-		tag = tag.tag
-		if tag is None:
+		tags = TinyTag.get(path)
+		if tags is None:
 			yield (getPureName(path), {"path": path, "title": getPureName(path), "artist": "unkown", "trackNumber": ""})
 			continue
 		obj = {"path": path, "title": "unknown title", "artist": "unknown", "album": "", "trackNumber": ""}
-		if tag.title:
-			obj["title"] = tag.title
-		if tag.artist:
-			obj["artist"] = tag.artist
-		if tag.album:
-			obj["album"] = tag.album
-		if tag.track_num[0]:
-			if tag.track_num[0] < 10:
-				obj["trackNumber"] = "0"+str(tag.track_num[0])
+		
+		obj["title"] = tags.title
+		obj["artist"] = tags.artist or "unknown"
+		obj["album"] = tags.album
+		if tags.track:
+			if int(float(tags.track)) < 10:
+				obj["trackNumber"] = "0"+tags.track
 			else:
-				obj["trackNumber"] = str(tag.track_num[0])
+				obj["trackNumber"] = tags.track
 
 		name = (obj["title"]+" - "+(obj["artist"]))
 
@@ -553,9 +548,7 @@ def albumFilterEvent(album: str):
 
 def playlistFilterEvent(playlist: str):
 	global filterChange
-	print("ou", playlist)
 	if not filterChange:
-		print("in", playlist)
 		filterChange = True
 		filters["artist"] = ""
 		filters["album"] = ""
