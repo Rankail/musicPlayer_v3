@@ -288,6 +288,8 @@ def removeSong(sourceIndex: QModelIndex, songname: str):
 
 		if not foundAlb:
 			#remove song["album"]
+			# do some extra steps if filters are currently filtering this
+			# remove from comboBox
 			print("remove album '"+song["album"]+"'")
 	else:
 		for name, obj in allSongs.items():
@@ -297,13 +299,22 @@ def removeSong(sourceIndex: QModelIndex, songname: str):
 					break
 
 	if not foundArt:
-		# remove song["artist"]
+		# remove song["artist"]:
+		# do some extra steps if filters are currently filtering this
+		# remove from comboBox
 		print("remove artist '"+song["artist"]+"'")
 
 	#remove from source model
+	# automatically updates proxy?
+
 	#remove from paths
+	# is in paths or in dirnam in folders?
+	# -> remove from paths or add to removedPaths
+	# test if folder has no other songs listed?
+	# -> remove removedPaths and folderpath
+
 	#remove from allSongs
-	pass
+	# allSongs.pop(songname)
 
 #----------------------------------
 #-------- Playlist-Controls -------
