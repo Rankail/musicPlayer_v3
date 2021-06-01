@@ -234,10 +234,10 @@ emitAddSong = EmitAddSong()
 emitAddSong.addSongsSignal.connect(songLoader.addSongs)
 loaderThread.start()
 
-#supported filetypes: mp3 wav ogg opus flac wma
+#supported filetypes: mp3 wav ogg flac wma
 #adding single song
 def addSong():
-	path = QFileDialog.getOpenFileName(window, "Choose a song", None, "Supported filetypes (*.mp3 *.wav *.ogg *.opus *.flac *.wma)")[0]
+	path = QFileDialog.getOpenFileName(window, "Choose a song", None, "Supported filetypes (*.mp3 *.wav *.ogg *.flac *.wma)")[0]
 	if path:
 		if not (path in paths or dirname(path) in folders):
 			if path in removedPaths:
@@ -248,7 +248,7 @@ def addSong():
 
 #adding multiple songs
 def addSongs():
-	ps = QFileDialog.getOpenFileNames(window, "Choose songs", None, "Supported filetypes (*.mp3 *.wav *.ogg *.flac *.wma *.opus)")[0]
+	ps = QFileDialog.getOpenFileNames(window, "Choose songs", None, "Supported filetypes (*.mp3 *.wav *.ogg *.flac *.wma)")[0]
 	if ps:
 		ps = [p for p in paths if not (p in paths or dirname(p) in folders)]
 		for p in ps:
@@ -266,13 +266,40 @@ def addFolder():
 			return
 		folders.append(folderpath)
 		ps = listdir(folderpath)
-		ps = [folderpath+"/"+f for f in ps if f.endswith((".mp3", ".wav", ".ogg", ".flac", ".wma", ".opus"))]
+		ps = [folderpath+"/"+f for f in ps if f.endswith((".mp3", ".wav", ".ogg", ".flac", ".wma"))]
 		ps = [p for p in ps if not p in paths]
 		emitAddSong.addSongs(ps)
 
 def removeSong(sourceIndex: QModelIndex, songname: str):
 	print("remove '"+songname+"'")
 	#test if needs to remove artist/album
+	song = allSongs[songname]
+	foundArt = False
+	foundAlb = False
+	if song["album"]:
+		for name, obj in allSongs.items():
+			if not name == songname:
+				if obj["artist"] == song["artist"]:
+					foundArt = True
+				if obj["album"] == song["album"]:
+					foundAlb = True
+				if foundArt and foundAlb:
+					break
+
+		if not foundAlb:
+			#remove song["album"]
+			print("remove album '"+song["album"]+"'")
+	else:
+		for name, obj in allSongs.items():
+			if not name == songname:
+				if obj["artist"] == song["artist"]:
+					foundArt = True
+					break
+
+	if not foundArt:
+		# remove song["artist"]
+		print("remove artist '"+song["artist"]+"'")
+
 	#remove from source model
 	#remove from paths
 	#remove from allSongs
