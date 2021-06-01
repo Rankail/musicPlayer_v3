@@ -234,9 +234,10 @@ emitAddSong = EmitAddSong()
 emitAddSong.addSongsSignal.connect(songLoader.addSongs)
 loaderThread.start()
 
+#supported filetypes: mp3 wav ogg opus flac wma
 #adding single song
 def addSong():
-	path = QFileDialog.getOpenFileName(window, "Choose a song", None, "mp3 files (*.mp3)")[0]
+	path = QFileDialog.getOpenFileName(window, "Choose a song", None, "Supported filetypes (*.mp3 *.wav *.ogg *.opus *.flac *.wma)")[0]
 	if path:
 		if not (path in paths or dirname(path) in folders):
 			if path in removedPaths:
@@ -247,7 +248,7 @@ def addSong():
 
 #adding multiple songs
 def addSongs():
-	ps = QFileDialog.getOpenFileNames(window, "Choose songs", None, "mp3 files (*.mp3)")[0]
+	ps = QFileDialog.getOpenFileNames(window, "Choose songs", None, "Supported filetypes (*.mp3 *.wav *.ogg *.flac *.wma *.opus)")[0]
 	if ps:
 		ps = [p for p in paths if not (p in paths or dirname(p) in folders)]
 		for p in ps:
@@ -265,9 +266,17 @@ def addFolder():
 			return
 		folders.append(folderpath)
 		ps = listdir(folderpath)
-		ps = [folderpath+"/"+f for f in ps if f.endswith('.mp3')]
+		ps = [folderpath+"/"+f for f in ps if f.endswith((".mp3", ".wav", ".ogg", ".flac", ".wma", ".opus"))]
 		ps = [p for p in ps if not p in paths]
 		emitAddSong.addSongs(ps)
+
+def removeSong(sourceIndex: QModelIndex, songname: str):
+	print("remove '"+songname+"'")
+	#test if needs to remove artist/album
+	#remove from source model
+	#remove from paths
+	#remove from allSongs
+	pass
 
 #----------------------------------
 #-------- Playlist-Controls -------
@@ -548,9 +557,7 @@ def albumFilterEvent(album: str):
 
 def playlistFilterEvent(playlist: str):
 	global filterChange
-	print("ou", playlist)
 	if not filterChange:
-		print("in", playlist)
 		filterChange = True
 		filters["artist"] = ""
 		filters["album"] = ""
@@ -849,8 +856,13 @@ class SongTable(QTableView):
 				addToPlaylistMenu.addAction(actions[p])
 				actions[p].triggered.connect(lambda checked, pl=p: addToPlaylist(pl, songname))
 
+		removeSongAction = QAction("Remove Song", self.menu)
+		removeSongAction.triggered.connect(lambda checked: removeSong(sourceIndex, songname))
+
 		self.menu.addMenu(addToPlaylistMenu)
 		self.menu.addMenu(removeFromPlayListMenu)
+		self.menu.addSeparator()
+		self.menu.addAction(removeSongAction)
 
 		self.menu.popup(QCursor.pos())
 
