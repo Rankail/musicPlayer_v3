@@ -270,10 +270,12 @@ def addFolder():
 		ps = [p for p in ps if not p in paths]
 		emitAddSong.addSongs(ps)
 
-def removeSong(sourceIndex: QModelIndex, songname: str):
+def removeSong(sourceRow: int, songname: str):
+	global removedPaths, filterChange
 	print("remove '"+songname+"'")
 	#test if needs to remove artist/album
 	song = allSongs[songname]
+	filterChange = True
 	foundArt = False
 	foundAlb = False
 	if song["album"]:
@@ -287,8 +289,15 @@ def removeSong(sourceIndex: QModelIndex, songname: str):
 					break
 
 		if not foundAlb:
-			#remove song["album"]
-			print("remove album '"+song["album"]+"'")
+			if filters["album"] == song["album"]:
+				filters["album"] = ""
+				index = albumListBox.currentIndex()
+				albumListBox.setCurrentText("-- None Selected --")
+				albumListBox.removeItem(index)
+			else:
+				index = albumListBox.findText(song["album"])
+				albumListBox.removeItem(index)
+			print("removed album '"+song["album"]+"'")
 	else:
 		for name, obj in allSongs.items():
 			if not name == songname:
@@ -297,13 +306,37 @@ def removeSong(sourceIndex: QModelIndex, songname: str):
 					break
 
 	if not foundArt:
-		# remove song["artist"]
-		print("remove artist '"+song["artist"]+"'")
+		if filters["artist"] == song["artist"]:
+			filters["artist"] = ""
+			index = artistListBox.currentIndex()
+			artistListBox.setCurrentText("-- None Selected --")
+			artistListBox.removeItem(index)
+		else:
+			index = artistListBox.findText(song["artist"])
+			artistListBox.removeItem(index)
+		print("removed artist '"+song["artist"]+"'")
 
 	#remove from source model
+	songTableModel.removeRow(sourceRow)
+
 	#remove from paths
+	if song["path"] in paths:
+		paths.remove(song["path"])
+	elif dirname(song["path"]) in folders:
+		removedPaths.append(song["path"])
+		dir = dirname(song["path"])
+		for s in allSongs:
+			if dirname(allSongs[s]["path"]) == dir:
+				break
+		else:
+			removedPaths = [rp for rp in removedPaths if dirname(rp) != dir]
+			folders.remove(dir)
+
 	#remove from allSongs
-	pass
+	allSongs.pop(songname)
+	
+	print("filterChangeTrue", filterChange)
+	filterSongTable.setFilterFixedString("")
 
 #----------------------------------
 #-------- Playlist-Controls -------
@@ -496,7 +529,8 @@ def playPauseSong():
 #------------- Events -------------
 #----------------------------------
 def songSelectedEvent(nIndex: QModelIndex, pIndex: QModelIndex):
-	global curIndex, curSongname, selectionAboutChanged, playing
+	global curIndex, curSongname, selectionAboutChanged, playing, filterChange
+	print("nIndex", filterChange)
 	if selectionAboutChanged:
 		selectionAboutChanged = False
 		return
@@ -609,6 +643,7 @@ def sortChangedScroll(index, order):
 def tableViewFilterEnded():
 	global filterChange
 	if filterChange:
+		print("tableViewFilterEnded")
 		filterChange = False
 		if filters["album"]:
 			filterSongTable.sort(3, Qt.SortOrder.AscendingOrder)
@@ -867,9 +902,9 @@ class SongTable(QTableView):
 	def contextMenuEvent(self, e: QContextMenuEvent):
 		self.menu = QMenu(self)
 		sourceIndex = filterSongTable.mapToSource(self.indexAt(e.pos()))
-		row = sourceIndex.row()
-		if row == -1: return
-		songname = songTableModel.data(songTableModel.index(row, 0))+" - "+songTableModel.data(songTableModel.index(row, 1))
+		sourceRow = sourceIndex.row()
+		if sourceRow == -1: return
+		songname = songTableModel.data(songTableModel.index(sourceRow, 0))+" - "+songTableModel.data(songTableModel.index(sourceRow, 1))
 		addToPlaylistMenu = QMenu("Add To Playlist", self.menu)
 		removeFromPlayListMenu = QMenu("Remove From Playlist", self.menu)
 		actions = {}
@@ -884,7 +919,7 @@ class SongTable(QTableView):
 				actions[p].triggered.connect(lambda checked, pl=p: addToPlaylist(pl, songname))
 
 		removeSongAction = QAction("Remove Song", self.menu)
-		removeSongAction.triggered.connect(lambda checked: removeSong(sourceIndex, songname))
+		removeSongAction.triggered.connect(lambda checked: removeSong(sourceRow, songname))
 
 		self.menu.addMenu(addToPlaylistMenu)
 		self.menu.addMenu(removeFromPlayListMenu)
