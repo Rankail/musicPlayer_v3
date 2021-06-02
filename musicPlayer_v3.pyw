@@ -33,7 +33,7 @@ app = QApplication(sys.argv)
 playing = True
 paused = False
 
-filterChange = False
+deactivateFilterEvents = False
 selectionAboutChanged = False
 
 #paths
@@ -57,8 +57,8 @@ playlists = {}
 #list of currently shown songnames
 songList = []
 
-artistList = ["-- None Selected --"]
-albumList = ["-- None Selected --"]
+artistList = []
+albumList = []
 
 #cur song
 curIndex = 0
@@ -194,12 +194,12 @@ def addSongToList(name: str, obj: dict):
 		if "artist" in obj and not obj["artist"] in artistList:
 			i = bisect_left(artistList, obj["artist"])
 			artistList.insert(i, obj["artist"])
-			artistListBox.insertItem(i, obj["artist"])
+			artistListBox.insertItem(i+1, obj["artist"])
 
 		if "album" in obj and obj["album"] and not obj["album"] in albumList:
 			i = bisect_left(albumList, obj["album"])
 			albumList.insert(i, obj["album"])
-			albumListBox.insertItem(i, obj["album"])
+			albumListBox.insertItem(i+1, obj["album"])
 
 		allSongs[name] = obj
 
@@ -215,14 +215,15 @@ def addSongToList(name: str, obj: dict):
 
 def finishedLoadingSongs():
 	global selectionAboutChanged
-	if curSongname in allSongs:
-		i = findRowBySongname(curSongname)
-		if i != -1:
-			selectionAboutChanged = True
-			songListBox.selectRow(i)
-			songListBox.scrollTo(filterSongTable.index(i, 0), 3)
-		else:
-			songListBox.scrollTo(filterSongTable.index(0, 0))
+	if not curSongname in allSongs: return
+
+	i = findRowBySongname(curSongname)
+	if i != -1:
+		selectionAboutChanged = True
+		songListBox.selectRow(i)
+		songListBox.scrollTo(filterSongTable.index(i, 0), 3)
+	else:
+		songListBox.scrollTo(filterSongTable.index(0, 0))
 
 #initialize thread+connections
 loaderThread = QThread()
@@ -238,44 +239,46 @@ loaderThread.start()
 #adding single song
 def addSong():
 	path = QFileDialog.getOpenFileName(window, "Choose a song", None, "Supported filetypes (*.mp3 *.wav *.ogg *.flac *.wma)")[0]
-	if path:
-		if not (path in paths or dirname(path) in folders):
-			if path in removedPaths:
-				removedPaths.remove(path)
-			else:
-				paths.append(path)
-		emitAddSong.addSongs([path])
+	if not path: return
+
+	if not (path in paths or dirname(path) in folders):
+		if path in removedPaths:
+			removedPaths.remove(path)
+		else:
+			paths.append(path)
+	emitAddSong.addSongs([path])
 
 #adding multiple songs
 def addSongs():
 	ps = QFileDialog.getOpenFileNames(window, "Choose songs", None, "Supported filetypes (*.mp3 *.wav *.ogg *.flac *.wma)")[0]
-	if ps:
-		ps = [p for p in paths if not (p in paths or dirname(p) in folders)]
-		for p in ps:
-			if p in removedPaths:
-				removedPaths.remove(p)
-			else:
-				paths.append(p)
-		emitAddSong.addSongs(paths)
+	if not ps: return
+		
+	ps = [p for p in paths if not (p in paths or dirname(p) in folders)]
+	for p in ps:
+		if p in removedPaths:
+			removedPaths.remove(p)
+		else:
+			paths.append(p)
+	emitAddSong.addSongs(paths)
 
 #adding songs from folder
 def addFolder():
 	folderpath = QFileDialog.getExistingDirectory(window, "Choose a folder", None)
-	if folderpath:
-		if folderpath in folders:
-			return
-		folders.append(folderpath)
-		ps = listdir(folderpath)
-		ps = [folderpath+"/"+f for f in ps if f.endswith((".mp3", ".wav", ".ogg", ".flac", ".wma"))]
-		ps = [p for p in ps if not p in paths]
-		emitAddSong.addSongs(ps)
+	if not folderpath: return
+
+	if folderpath in folders:
+		return
+	folders.append(folderpath)
+	ps = listdir(folderpath)
+	ps = [folderpath+"/"+f for f in ps if f.endswith((".mp3", ".wav", ".ogg", ".flac", ".wma"))]
+	ps = [p for p in ps if not p in paths]
+	emitAddSong.addSongs(ps)
 
 def removeSong(sourceRow: int, songname: str):
-	global removedPaths, filterChange
-	print("remove '"+songname+"'")
+	global removedPaths, deactivateFilterEvents
 	#test if needs to remove artist/album
 	song = allSongs[songname]
-	filterChange = True
+	deactivateFilterEvents = True
 	foundArt = False
 	foundAlb = False
 	if song["album"]:
@@ -289,6 +292,7 @@ def removeSong(sourceRow: int, songname: str):
 					break
 
 		if not foundAlb:
+			albumList.rmeove(song["album"])
 			if filters["album"] == song["album"]:
 				filters["album"] = ""
 				index = albumListBox.currentIndex()
@@ -297,7 +301,6 @@ def removeSong(sourceRow: int, songname: str):
 			else:
 				index = albumListBox.findText(song["album"])
 				albumListBox.removeItem(index)
-			print("removed album '"+song["album"]+"'")
 	else:
 		for name, obj in allSongs.items():
 			if not name == songname:
@@ -306,6 +309,7 @@ def removeSong(sourceRow: int, songname: str):
 					break
 
 	if not foundArt:
+		artistList.remove(song["artist"])
 		if filters["artist"] == song["artist"]:
 			filters["artist"] = ""
 			index = artistListBox.currentIndex()
@@ -314,7 +318,6 @@ def removeSong(sourceRow: int, songname: str):
 		else:
 			index = artistListBox.findText(song["artist"])
 			artistListBox.removeItem(index)
-		print("removed artist '"+song["artist"]+"'")
 
 	#remove from source model
 	songTableModel.removeRow(sourceRow)
@@ -334,9 +337,36 @@ def removeSong(sourceRow: int, songname: str):
 
 	#remove from allSongs
 	allSongs.pop(songname)
-	
-	print("filterChangeTrue", filterChange)
 	filterSongTable.setFilterFixedString("")
+
+def removeAllSongs():
+	global deactivateFilterEvents, artistList, albumList, allSongs, paths, folders, removedPaths
+
+	dialog = QMessageBox()
+	dialog.setWindowTitle("Delete all songs?")
+	dialog.setText("Are you sure you want to delete all songs?")
+	dialog.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+	dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+	dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+	result = dialog.exec()
+	if result != QMessageBox.StandardButton.Ok: return
+
+	deactivateFilterEvents = True
+
+	songTableModel.removeRows(0, songTableModel.rowCount())
+
+	artistList = []
+	artistListBox.clear()
+	artistListBox.addItem("-- None Selected --")
+	albumList = []
+	albumListBox.clear()
+	albumListBox.addItem("-- None Selected --")
+	playListListBox.clear()
+	playListListBox.addItem("-- None Selected --")
+	allSongs = {}
+	paths = []
+	folders = []
+	removedPaths = []
 
 #----------------------------------
 #-------- Playlist-Controls -------
@@ -351,9 +381,10 @@ def createPlaylist():
 	dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
 	ok = dialog.exec()
 	text = dialog.textValue()
-	if ok and text:
-		playlists[text] = []
-		playListListBox.addItem(text)
+	if not (ok and text): return
+
+	playlists[text] = []
+	playListListBox.addItem(text)
 
 def addToPlaylist(playlist: str, songname: str):
 	playlists[playlist].append(songname)
@@ -411,25 +442,27 @@ def renamePlaylist():
 	playListListBox.setItemText(index, newName)
 
 def removeFromPlaylist(playlist: str, songname: str):
-	global filterChange
+	global deactivateFilterEvents
 	playlists[playlist].remove(songname)
-	filterChange = True
+	deactivateFilterEvents = True
 	filterSongTable.setFilterFixedString("")
 
 def delCurPlaylist():
-	if filters["playlist"] and filters["playlist"] in playlists:
-		dialog = QMessageBox()
-		dialog.setWindowTitle("Delete Playlist?")
-		dialog.setText("Do you want to delete the playlist '"+filters["playlist"]+"'?")
-		dialog.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
-		dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
-		dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
-		result = dialog.exec()
-		if result == QMessageBox.StandardButton.Ok:
-			playlists.pop(filters["playlist"])
-			index = playListListBox.currentIndex()
-			playListListBox.setCurrentText("-- None Selected --")
-			playListListBox.removeItem(index)
+	if not (filters["playlist"] and filters["playlist"] in playlists): return
+
+	dialog = QMessageBox()
+	dialog.setWindowTitle("Delete Playlist?")
+	dialog.setText("Do you want to delete the playlist '"+filters["playlist"]+"'?")
+	dialog.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+	dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+	dialog.setStyleSheet("* {background-color:"+bg1+";color:"+textCol+";font-size: 10pt; }")
+	result = dialog.exec()
+	if result != QMessageBox.StandardButton.Ok: return
+	
+	playlists.pop(filters["playlist"])
+	index = playListListBox.currentIndex()
+	playListListBox.setCurrentText("-- None Selected --")
+	playListListBox.removeItem(index)
 
 #----------------------------------
 #--------- Music-Controls ---------
@@ -496,8 +529,10 @@ def startSongByCurIndex():
 def prevSong():
 	global curIndex
 	if curIndex == -1: return
+
 	allSelections = songListBox.selectionModel().selectedRows()
 	if len(allSelections) <= 0: return
+
 	curIndex = allSelections[0].row()
 	if type(curIndex) == int and curIndex >= 0 and filterSongTable.rowCount() > 1 and playing:
 		curIndex = (curIndex-1)%filterSongTable.rowCount()
@@ -516,25 +551,25 @@ def nextSong():
 
 def playPauseSong():
 	global playing, paused
-	if playing:
-		paused = not paused
-		vlcPlayer.set_pause(paused)
-		if paused:
-			playPauseBtn.setIcon(playBtnImg)
-		else:
-			playPauseBtn.setIcon(pauseBtnImg)
-			QTimer.singleShot(0, updatePlayTime)
+	if not playing: return
+	
+	paused = not paused
+	vlcPlayer.set_pause(paused)
+	if paused:
+		playPauseBtn.setIcon(playBtnImg)
+	else:
+		playPauseBtn.setIcon(pauseBtnImg)
+		QTimer.singleShot(0, updatePlayTime)
 
 #----------------------------------
 #------------- Events -------------
 #----------------------------------
 def songSelectedEvent(nIndex: QModelIndex, pIndex: QModelIndex):
-	global curIndex, curSongname, selectionAboutChanged, playing, filterChange
-	print("nIndex", filterChange)
+	global curIndex, curSongname, selectionAboutChanged, playing, deactivateFilterEvents
 	if selectionAboutChanged:
 		selectionAboutChanged = False
 		return
-	if filterChange:
+	if deactivateFilterEvents:
 		curIndex = -1
 		curSongname = ""
 		vlcPlayer.stop()
@@ -551,25 +586,27 @@ def songSelectedEvent(nIndex: QModelIndex, pIndex: QModelIndex):
 	play(curSongname)
 
 def volumeEvent(newVolume: int):
-    global curVolume
-    newVolume = max(0, min(int(newVolume), 100))
-    if curVolume != newVolume:
-        curVolume = newVolume
-        volumeSlider.setValue(curVolume)
-        vlcPlayer.audio_set_volume(curVolume)
-        volumeIcon.setPixmap(volIconList[ceil(curVolume/25)])
+	global curVolume
+	newVolume = max(0, min(int(newVolume), 100))
+	if curVolume == newVolume: return
+
+	curVolume = newVolume
+	volumeSlider.setValue(curVolume)
+	vlcPlayer.audio_set_volume(curVolume)
+	volumeIcon.setPixmap(volIconList[ceil(curVolume/25)])
 
 def timeSlideEvent(pos: int):
-    global curTimePos
-    pos = int(float(pos))
-    if curTimePos != pos:
-        curTimePos = pos
-        vlcPlayer.set_time(curTimePos*1000)
-        playTimeLbl.setText(time.strftime('%H:%M:%S', time.gmtime(curTimePos)))
+	global curTimePos
+	pos = int(float(pos))
+	if curTimePos == pos: return
+
+	curTimePos = pos
+	vlcPlayer.set_time(curTimePos*1000)
+	playTimeLbl.setText(time.strftime('%H:%M:%S', time.gmtime(curTimePos)))
 
 def clearFilters():
-	global filterChange
-	filterChange = True
+	global deactivateFilterEvents
+	deactivateFilterEvents = True
 	filters["search"] = ""
 	filters["artist"] = ""
 	filters["album"] = ""
@@ -581,54 +618,57 @@ def clearFilters():
 	playListListBox.setCurrentText("-- None Selected --")
 
 def searchEvent(text: str):
-	global filterChange
-	filterChange = True
+	global deactivateFilterEvents
+	deactivateFilterEvents = True
 	filters["search"] = text
 	filterSongTable.setFilterFixedString("")
 	albumListBox.setCurrentText("-- None Selected --")
 	playListListBox.setCurrentText("-- None Selected --")
 
 def artistFilterEvent(artist: str):
-	global filterChange
-	if not filterChange:
-		filterChange = True
-		if artist == "-- None Selected --":
-			filters["artist"] = ""
-		else:
-			filters["artist"] = artist
-		filters["album"] = ""
-		filters["playlist"] = ""
-		filterSongTable.setFilterFixedString("")
-		albumListBox.setCurrentText("-- None Selected --")
-		playListListBox.setCurrentText("-- None Selected --")
+	global deactivateFilterEvents
+	if deactivateFilterEvents: return
+
+	deactivateFilterEvents = True
+	if artist == "-- None Selected --":
+		filters["artist"] = ""
+	else:
+		filters["artist"] = artist
+	filters["album"] = ""
+	filters["playlist"] = ""
+	filterSongTable.setFilterFixedString("")
+	albumListBox.setCurrentText("-- None Selected --")
+	playListListBox.setCurrentText("-- None Selected --")
 
 def albumFilterEvent(album: str):
-	global filterChange
-	if not filterChange:
-		filterChange = True
-		filters["artist"] = ""
-		if album == "-- None Selected --":
-			filters["album"] = ""
-		else:
-			filters["album"] = album
-		filters["playlist"] = ""
-		filterSongTable.setFilterFixedString("")
-		artistListBox.setCurrentText("-- None Selected --")
-		playListListBox.setCurrentText("-- None Selected --")
+	global deactivateFilterEvents
+	if deactivateFilterEvents: return
+
+	deactivateFilterEvents = True
+	filters["artist"] = ""
+	if album == "-- None Selected --":
+		filters["album"] = ""
+	else:
+		filters["album"] = album
+	filters["playlist"] = ""
+	filterSongTable.setFilterFixedString("")
+	artistListBox.setCurrentText("-- None Selected --")
+	playListListBox.setCurrentText("-- None Selected --")
 
 def playlistFilterEvent(playlist: str):
-	global filterChange
-	if not filterChange:
-		filterChange = True
-		filters["artist"] = ""
-		filters["album"] = ""
-		if playlist == "-- None Selected --":
-			filters["playlist"] = ""
-		else:
-			filters["playlist"] = playlist
-		filterSongTable.setFilterFixedString("")
-		artistListBox.setCurrentText("-- None Selected --")
-		albumListBox.setCurrentText("-- None Selected --")
+	global deactivateFilterEvents
+	if deactivateFilterEvents: return
+
+	deactivateFilterEvents = True
+	filters["artist"] = ""
+	filters["album"] = ""
+	if playlist == "-- None Selected --":
+		filters["playlist"] = ""
+	else:
+		filters["playlist"] = playlist
+	filterSongTable.setFilterFixedString("")
+	artistListBox.setCurrentText("-- None Selected --")
+	albumListBox.setCurrentText("-- None Selected --")
 
 def sortChangedScroll(index, order):
 	global curIndex
@@ -641,22 +681,22 @@ def sortChangedScroll(index, order):
 		songListBox.scrollTo(filterSongTable.index(curIndex, 0), 3)
 
 def tableViewFilterEnded():
-	global filterChange
-	if filterChange:
-		print("tableViewFilterEnded")
-		filterChange = False
-		if filters["album"]:
-			filterSongTable.sort(3, Qt.SortOrder.AscendingOrder)
-			songListBox.showColumn(3)
-		else:
-			filterSongTable.sort(0, Qt.SortOrder.AscendingOrder)
-			songListBox.hideColumn(3)
+	global deactivateFilterEvents
+	if not deactivateFilterEvents: return
+	
+	deactivateFilterEvents = False
+	if filters["album"]:
+		filterSongTable.sort(3, Qt.SortOrder.AscendingOrder)
+		songListBox.showColumn(3)
+	else:
+		filterSongTable.sort(0, Qt.SortOrder.AscendingOrder)
+		songListBox.hideColumn(3)
 
-		allSelections = songListBox.selectionModel().selectedRows()
-		if len(allSelections) <= 0:
-			songListBox.scrollTo(filterSongTable.index(0, 0))
-		else:
-			songListBox.scrollTo(filterSongTable.index(allSelections[0].row(), 0), 3)
+	allSelections = songListBox.selectionModel().selectedRows()
+	if len(allSelections) <= 0:
+		songListBox.scrollTo(filterSongTable.index(0, 0))
+	else:
+		songListBox.scrollTo(filterSongTable.index(allSelections[0].row(), 0), 3)
 
 def shuffleSongs():
 	global curIndex
@@ -712,21 +752,18 @@ addSongAction.triggered.connect(addSong)
 addSongsAction.triggered.connect(addSongs)
 addFolderAction.triggered.connect(addFolder)
 
-# delActiveSongAction = QAction("Remove Current Song", window)
 # delShownSongsAction = QAction("Remove Shown Songs", window)
-# delAllSongsAction = QAction("Remove All Songs", window)
+delAllSongsAction = QAction("Remove All Songs", window)
 
-# delActiveSongAction.triggered.connect(removeActiveSong)
 # delShownSongsAction.triggered.connect(removeShownSongs)
-# delAllSongsAction.triggered.connect(removeAllSongs)
+delAllSongsAction.triggered.connect(removeAllSongs)
 
 fileMenu.addAction(addSongAction)
 fileMenu.addAction(addSongsAction)
 fileMenu.addAction(addFolderAction)
 fileMenu.addSeparator()
-# fileMenu.addAction(delActiveSongAction)
 # fileMenu.addAction(delShownSongsAction)
-# fileMenu.addAction(delAllSongsAction)
+fileMenu.addAction(delAllSongsAction)
 
 playListMenu = QMenu("Playlist", menubar)
 menubar.addMenu(playListMenu)
@@ -1200,10 +1237,15 @@ def loadPaths():
 			folders = parts[1].split("\n")
 		else:
 			parts = file.split("\n\n")
+			print(parts)
 			paths = parts[0].split("\n")
 			folders = parts[1].split("\n")
 			removedPaths = parts[2].split("\n")
 		
+		paths = [p for p in paths if p]
+		folders = [f for f in folders if f]
+		removedPaths = [rp for rp in removedPaths if rp]
+
 		ps = []
 		ps.extend(paths)
 		for f in folders:
@@ -1234,8 +1276,8 @@ if isdir(iniDir):
 	loadPaths()
 	loadPlaylists()		
 else:
-    print("Failed to load resources form '"+iniDir+"'")
-    exit()
+	print("Failed to load resources form '"+iniDir+"'")
+	exit()
 
 #-------------------------------------------------------------------
 #---------------------------- Main-Loop ----------------------------
@@ -1259,11 +1301,11 @@ s += str(filters["artist"])+"\n"
 s += str(filters["album"])
 
 if isfile(iniDir+"/config.txt"):
-    with open(iniDir+"/config.txt", "w", encoding="utf-8") as f:
-        f.write(s)
+	with open(iniDir+"/config.txt", "w", encoding="utf-8") as f:
+		f.write(s)
 else:
-    with open(iniDir+"/config.txt", "x", encoding="utf-8") as f:
-        f.write(s)
+	with open(iniDir+"/config.txt", "x", encoding="utf-8") as f:
+		f.write(s)
 
 # save paths
 s = ""
@@ -1277,11 +1319,11 @@ for rp in removedPaths:
 	s += "\n"+rp
 
 if isfile(iniDir+"/paths.txt"):
-    with open(iniDir+"/paths.txt", "w", encoding="utf-8") as f:
-        f.write(s)
+	with open(iniDir+"/paths.txt", "w", encoding="utf-8") as f:
+		f.write(s)
 else:
-    with open(iniDir+"/paths.txt", "x", encoding="utf-8") as f:
-        f.write(s)
+	with open(iniDir+"/paths.txt", "x", encoding="utf-8") as f:
+		f.write(s)
 
 #save playlists
 s = ""
@@ -1293,8 +1335,8 @@ for playlist, songs in playlists.items():
 s = s[:-2]
 
 if isfile(iniDir+"/playlists.txt"):
-    with open(iniDir+"/playlists.txt", "w", encoding="utf-8") as f:
-        f.write(s)
+	with open(iniDir+"/playlists.txt", "w", encoding="utf-8") as f:
+		f.write(s)
 else:
-    with open(iniDir+"/playlists.txt", "x", encoding="utf-8") as f:
-        f.write(s)
+	with open(iniDir+"/playlists.txt", "x", encoding="utf-8") as f:
+		f.write(s)
