@@ -520,7 +520,7 @@ def delCurPlaylist():
 #----------------------------------
 
 def play(name: str, startPos=0):
-	global curSongLen, curTimePos, playing, curSongname
+	global curSongLen, curTimePos, playing, paused, curSongname
 
 	path = allSongs[name]["path"]
 	if not path: return
@@ -540,10 +540,14 @@ def play(name: str, startPos=0):
 	
 	playTimeLbl.setText(time.strftime('%H:%M:%S', time.gmtime(startPos)))
 
-	if paused:
-		playPauseBtn.setIcon(playBtnImg)
-	else:
+	if startPos == 0:
 		playPauseBtn.setIcon(pauseBtnImg)
+		paused = False
+	else:
+		if paused:
+			playPauseBtn.setIcon(playBtnImg)
+		else:
+			playPauseBtn.setIcon(pauseBtnImg)
 
 	#can't access some properties before the song is playing
 	curState = vlcPlayer.get_state()
@@ -734,8 +738,6 @@ def sortChangedScroll(index, order):
 def tableViewFilterEnded():
 	global deactivateFilterEvents
 	if not deactivateFilterEvents: return
-
-	print("reactivating filter")
 	
 	deactivateFilterEvents = False
 	if filters["album"]:
@@ -1236,7 +1238,7 @@ def loadConfig():
 		file = f.read()
 		if not file: return
 
-		lines = f.read().split("\n")
+		lines = file.split("\n")
 		if not len(lines) == 8: return
 
 		curSongname = lines[0]
@@ -1290,7 +1292,6 @@ def loadPaths():
 			folders = parts[1].split("\n")
 		else:
 			parts = file.split("\n\n")
-			print(parts)
 			paths = parts[0].split("\n")
 			folders = parts[1].split("\n")
 			removedPaths = parts[2].split("\n")
