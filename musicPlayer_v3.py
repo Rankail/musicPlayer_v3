@@ -339,6 +339,57 @@ def removeSong(sourceRow: int, songname: str):
 	allSongs.pop(songname)
 	filterSongTable.setFilterFixedString("")
 
+def removeShownSongs():
+	global deactivateFilterEvents
+
+	deactivateFilterEvents = True
+
+	for i in range(filterSongTable.rowCount()):
+		index0 = filterSongTable.index(i, 0)
+		index1 = filterSongTable.index(i, 1)
+		songname = (filterSongTable.data(index0))+" - "+(filterSongTable.data(index1))
+
+		path = allSongs[songname]["path"]
+		if path in paths:
+			paths.remove(path)
+		elif dirname(path) in folders:
+			removedPaths.append(path)
+
+		allSongs.pop(songname)
+
+	filterSongTable.removeRows(0, filterSongTable.rowCount())
+	artists = []
+	albums = []
+
+	for obj in allSongs.values():
+		if not obj["artist"] in artists:
+			artists.append(obj["artist"])
+		if not obj["album"] in albums:
+			albums.append(obj["album"])
+
+	if filters["artist"] and not filters["artist"] in artists:
+		artistListBox.setCurrentText("-- None Selected --")
+		filters["artist"] = ""
+	if filters["album"] and not filters["album"] in albums:
+		albumListBox.setCurrentText("-- None Selected --")
+		filters["album"] = ""
+
+	for i, art in enumerate(reversed(artistList)):
+		if not art in artists:
+			artistList.pop(i)
+			artistListBox.removeItem(i+1)
+
+	for i, alb in enumerate(reversed(albumList)):
+		if not alb in albums:
+			albumList.pop(i)
+			albumListBox.removeItem(i+1)
+
+	if filters["playlist"]:
+		playListListBox.setCurrentText("-- None Selected --")
+		filters["playlist"] = ""
+
+	filterSongTable.setFilterFixedString("")
+
 def removeAllSongs():
 	global deactivateFilterEvents, artistList, albumList, allSongs, paths, folders, removedPaths
 
@@ -683,6 +734,8 @@ def sortChangedScroll(index, order):
 def tableViewFilterEnded():
 	global deactivateFilterEvents
 	if not deactivateFilterEvents: return
+
+	print("reactivating filter")
 	
 	deactivateFilterEvents = False
 	if filters["album"]:
@@ -752,17 +805,17 @@ addSongAction.triggered.connect(addSong)
 addSongsAction.triggered.connect(addSongs)
 addFolderAction.triggered.connect(addFolder)
 
-# delShownSongsAction = QAction("Remove Shown Songs", window)
+delShownSongsAction = QAction("Remove Shown Songs", window)
 delAllSongsAction = QAction("Remove All Songs", window)
 
-# delShownSongsAction.triggered.connect(removeShownSongs)
+delShownSongsAction.triggered.connect(removeShownSongs)
 delAllSongsAction.triggered.connect(removeAllSongs)
 
 fileMenu.addAction(addSongAction)
 fileMenu.addAction(addSongsAction)
 fileMenu.addAction(addFolderAction)
 fileMenu.addSeparator()
-# fileMenu.addAction(delShownSongsAction)
+fileMenu.addAction(delShownSongsAction)
 fileMenu.addAction(delAllSongsAction)
 
 playListMenu = QMenu("Playlist", menubar)
