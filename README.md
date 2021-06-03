@@ -19,9 +19,16 @@
 
 ## Adding Songs
 
+file-types: .mp3 .wav .ogg .flac .wma
  * add single File
  * add multiple Files
  * add Folder
+
+## Removing Songs
+
+ * remove single song (right-click-menu)
+ * remove shown songs
+ * remove all songs
  
 ## Searchbar
 
